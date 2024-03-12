@@ -14,8 +14,6 @@ fileId, err := client.MultipleUploadFromFile(ctx, "your_file_path")
 // 下载
 err := client.DownloadToFile(ctx, "fileId", "to_file_path")
 
-// 获取文件信息
-
 ```
 
 ##### 联系
