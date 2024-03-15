@@ -411,3 +411,50 @@ func (c *client) DownloadToFile(ctx context.Context, location, dest string) erro
 	defer file.Close()
 	return c.DownloadToWriter(ctx, location, file)
 }
+
+func (c *client) UploadPart(ctx context.Context, data []byte) (location string, err error) {
+	postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "partial", UploadLength: len(data)})
+	if err != nil {
+		return "", err
+	}
+	if postResult.HTTPStatus != http.StatusCreated {
+		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+	}
+	patchResult, err := c.Patch(ctx, &PatchRequest{Location: postResult.Location, Body: data})
+	if err != nil {
+		return "", err
+	}
+	if patchResult.HTTPStatus != http.StatusNoContent {
+		return "", fmt.Errorf("PATCH partial error: %d %s", patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
+	}
+	return postResult.Location, nil
+}
+
+func (c *client) MergeParts(ctx context.Context, parts []string) (location string, err error) {
+	uc := make([]string, 0, len(parts))
+	for _, v := range parts {
+		uc = append(uc, "/files/"+v)
+	}
+	postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "final;" + strings.Join(uc, " ")})
+	if err != nil {
+		return "", err
+	}
+	if postResult.HTTPStatus != http.StatusCreated {
+		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+	}
+	return postResult.Location, nil
+}
+
+func (c *client) DiscardParts(ctx context.Context, parts []string) error {
+	var errs []error
+	for _, v := range parts {
+		_, err := c.Delete(ctx, &DeleteRequest{Location: v})
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}

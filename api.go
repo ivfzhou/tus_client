@@ -19,92 +19,152 @@ import (
 )
 
 type TusClient interface {
+	// Options 发送HTTP OPTIONS请求
 	Options(context.Context) (*OptionsResult, error)
+	// Post 发送HTTP POST请求
 	Post(context.Context, *PostRequest) (*PostResult, error)
+	// Head 发送HTTP HEAD请求
 	Head(context.Context, *HeadRequest) (*HeadResult, error)
+	// Patch 发送HTTP PATCH请求
 	Patch(context.Context, *PatchRequest) (*PatchResult, error)
+	// Delete 发送HTTP DELETE请求
 	Delete(context.Context, *DeleteRequest) (*DeleteResult, error)
+	// Get 发送HTTP GET请求
 	Get(context.Context, *GetRequest) (*GetResult, error)
+	// MultipleUploadFromFile 读取文件并发上传到服务器，返回文件在服务器标识
 	MultipleUploadFromFile(ctx context.Context, filePath string) (location string, err error)
+	// MultipleUploadFromReader 读取IO流直到EOF，并发上传到服务器，返回文件在服务器标识
 	MultipleUploadFromReader(ctx context.Context, r io.Reader) (location string, err error)
+	// DownloadToFile 从服务器下载文件到本地
 	DownloadToFile(ctx context.Context, location, dest string) error
+	// DownloadToWriter 从服务器下载文件到指定的IO流中
 	DownloadToWriter(ctx context.Context, location string, w io.Writer) error
+	// UploadPart 上传分片
+	UploadPart(ctx context.Context, data []byte) (location string, err error)
+	// MergeParts 合并分片，切片顺序决定顺序合并顺序
+	MergeParts(ctx context.Context, parts []string) (location string, err error)
+	// DiscardParts 丢弃上传的分片
+	DiscardParts(ctx context.Context, parts []string) error
 }
 
 type OptionsResult struct {
-	HTTPStatus           int
-	TusExtension         []string
-	TusResumable         string
-	TusVersion           []string
-	TusMaxSize           int
+	// HTTPStatus 响应码
+	HTTPStatus int
+	// TusExtension 服务器支持的扩展
+	TusExtension []string
+	// TusResumable 服务器运行的Tus协议版本
+	TusResumable string
+	// TusVersion 服务器支持的协议版本
+	TusVersion []string
+	// TusMaxSize 服务器允许的单次最大文件上传大小
+	TusMaxSize int
+	// TusChecksumAlgorithm 服务器支持的文件校验和算法
 	TusChecksumAlgorithm []string
 }
 
 type PostRequest struct {
-	TusResumable      string
-	UploadMetadata    map[string]string
-	UploadLength      int
+	// TusResumable 客户端使用Tus协议版本，默认1.0.0
+	TusResumable string
+	// UploadMetadata 文件元信息
+	UploadMetadata map[string]string
+	// UploadLength 文件上传大小
+	UploadLength int
+	// UploadDeferLength 文件大小在完成上传后确定
 	UploadDeferLength bool
-	Body              []byte
-	UploadConcat      string
+	// Body 文件数据
+	Body []byte
+	// UploadConcat 分片上传
+	UploadConcat string
 }
 
 type PostResult struct {
-	HTTPStatus   int
+	// HTTPStatus 响应码
+	HTTPStatus int
+	// TusResumable 服务器运行的Tus协议版本
 	TusResumable string
-	Location     string
+	// Location 文件标识
+	Location string
+	// UploadOffset 文件大小偏移量
 	UploadOffset int
 }
 
 type HeadRequest struct {
+	// TusResumable 客户端使用Tus协议版本，默认1.0.0
 	TusResumable string
-	Location     string
+	// Location 文件标识
+	Location string
 }
 
 type HeadResult struct {
-	HTTPStatus        int
-	TusResumable      string
-	UploadOffset      int
-	UploadLength      int
-	UploadMetadata    map[string]string
+	// HTTPStatus 响应码
+	HTTPStatus int
+	// TusResumable 服务器运行的Tus协议版本
+	TusResumable string
+	// UploadOffset 文件大小偏移量
+	UploadOffset int
+	// UploadLength 文件大小
+	UploadLength int
+	// UploadMetadata 文件元信息
+	UploadMetadata map[string]string
+	// UploadDeferLength 文件大小在完成上传后确定
 	UploadDeferLength bool
-	UploadConcat      []string
+	// UploadConcat 文件的分片信息
+	UploadConcat []string
 }
 
 type PatchRequest struct {
-	Location                string
-	TusResumable            string
-	UploadOffset            int
-	Body                    []byte
-	UploadChecksum          string
+	Location string
+	// TusResumable 客户端使用Tus协议版本，默认1.0.0
+	TusResumable string
+	// UploadOffset 文件大小偏移量
+	UploadOffset int
+	// Body 文件数据
+	Body []byte
+	// UploadChecksum 数据校验和
+	UploadChecksum string
+	// UploadChecksumAlgorithm 校验和算法
 	UploadChecksumAlgorithm string
 }
 
 type PatchResult struct {
-	HTTPStatus    int
-	TusResumable  string
-	UploadOffset  int
+	// HTTPStatus 响应码
+	HTTPStatus int
+	// TusResumable 服务器运行的Tus协议版本
+	TusResumable string
+	// UploadOffset 文件大小偏移量
+	UploadOffset int
+	// UploadExpires 文件过期时间
 	UploadExpires time.Time
 }
 
 type DeleteRequest struct {
+	// TusResumable 客户端使用Tus协议版本，默认1.0.0
 	TusResumable string
-	Location     string
+	// Location 文件标识
+	Location string
 }
 
 type DeleteResult struct {
-	HTTPStatus   int
+	// HTTPStatus 响应码
+	HTTPStatus int
+	// TusResumable 服务器运行的Tus协议版本
 	TusResumable string
 }
 
 type GetRequest struct {
+	// TusResumable 客户端使用Tus协议版本，默认1.0.0
 	TusResumable string
-	Location     string
+	// Location 文件标识
+	Location string
 }
 
 type GetResult struct {
-	HTTPStatus    int
-	TusResumable  string
-	Body          io.ReadCloser
+	// HTTPStatus 响应码
+	HTTPStatus int
+	// TusResumable 服务器运行的Tus协议版本
+	TusResumable string
+	// Body 文件数据IO流
+	Body io.ReadCloser
+	// ContentLength 文件大小
 	ContentLength int
 }
