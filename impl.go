@@ -230,6 +230,48 @@ func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, err
 	return res, nil
 }
 
+func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchResult, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	req, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, pr.Location),
+		nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(pr.TusResumable) <= 0 {
+		pr.TusResumable = "1.0.0"
+	}
+	req.Header.Set("Tus-Resumable", pr.TusResumable)
+	req.Header.Set("Content-Type", "application/offset+octet-stream")
+	req.Header.Set("Content-Length", strconv.Itoa(pr.BodySize))
+	req.Header.Set("Upload-Offset", strconv.Itoa(pr.UploadOffset))
+	if len(pr.UploadChecksum) > 0 && len(pr.UploadChecksumAlgorithm) > 0 {
+		req.Header.Set("Upload-Checksum", fmt.Sprintf("%s %s",
+			pr.UploadChecksumAlgorithm, base64.StdEncoding.EncodeToString([]byte(pr.UploadChecksum))))
+	}
+	req.ContentLength = int64(pr.BodySize)
+	req.Body = pr.Body
+	rsp, err := c.opt.hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if rsp.Body != nil {
+			_ = rsp.Body.Close()
+		}
+	}()
+	res := &PatchResult{
+		HTTPStatus:   rsp.StatusCode,
+		TusResumable: rsp.Header.Get("Tus-Resumable"),
+	}
+	res.UploadOffset, _ = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
+	res.UploadExpires, _ = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", rsp.Header.Get("Upload-Expires"))
+	return res, nil
+}
+
 func (c *client) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResult, error) {
 	select {
 	case <-ctx.Done():
@@ -421,6 +463,24 @@ func (c *client) UploadPart(ctx context.Context, data []byte) (location string, 
 		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 	}
 	patchResult, err := c.Patch(ctx, &PatchRequest{Location: postResult.Location, Body: data})
+	if err != nil {
+		return "", err
+	}
+	if patchResult.HTTPStatus != http.StatusNoContent {
+		return "", fmt.Errorf("PATCH partial error: %d %s", patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
+	}
+	return postResult.Location, nil
+}
+
+func (c *client) UploadPartByIO(ctx context.Context, data io.ReadCloser, length int) (location string, err error) {
+	postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "partial", UploadLength: length})
+	if err != nil {
+		return "", err
+	}
+	if postResult.HTTPStatus != http.StatusCreated {
+		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+	}
+	patchResult, err := c.PatchByIO(ctx, &PatchByIORequest{Location: postResult.Location, Body: data, BodySize: length})
 	if err != nil {
 		return "", err
 	}

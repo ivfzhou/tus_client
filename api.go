@@ -45,6 +45,10 @@ type TusClient interface {
 	MergeParts(ctx context.Context, parts []string) (location string, err error)
 	// DiscardParts 丢弃上传的分片
 	DiscardParts(ctx context.Context, parts []string) error
+	// UploadPartByIO 上传分片
+	UploadPartByIO(ctx context.Context, data io.ReadCloser, length int) (location string, err error)
+	// PatchByIO 发送HTTP PATCH请求
+	PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchResult, error)
 }
 
 type OptionsResult struct {
@@ -113,6 +117,7 @@ type HeadResult struct {
 }
 
 type PatchRequest struct {
+	// Location 文件标识
 	Location string
 	// TusResumable 客户端使用Tus协议版本，默认1.0.0
 	TusResumable string
@@ -120,6 +125,23 @@ type PatchRequest struct {
 	UploadOffset int
 	// Body 文件数据
 	Body []byte
+	// UploadChecksum 数据校验和
+	UploadChecksum string
+	// UploadChecksumAlgorithm 校验和算法
+	UploadChecksumAlgorithm string
+}
+
+type PatchByIORequest struct {
+	// Location 文件标识
+	Location string
+	// TusResumable 客户端使用Tus协议版本，默认1.0.0
+	TusResumable string
+	// UploadOffset 文件大小偏移量
+	UploadOffset int
+	// Body 文件数据
+	Body io.ReadCloser
+	// BodySize 大小
+	BodySize int
 	// UploadChecksum 数据校验和
 	UploadChecksum string
 	// UploadChecksumAlgorithm 校验和算法
