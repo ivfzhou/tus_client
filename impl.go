@@ -401,10 +401,13 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 		return true
 	})
 	slices.Sort(indexes)
+	partLocationIds := make([]string, 0, len(indexes))
 	uc := make([]string, 0, len(indexes))
 	for _, v := range indexes {
 		value, _ := m.Load(v)
-		uc = append(uc, "/files/"+value.(string))
+		s := value.(string)
+		uc = append(uc, "/files/"+s)
+		partLocationIds = append(partLocationIds, s)
 	}
 	postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "final;" + strings.Join(uc, " ")})
 	if err != nil {
@@ -413,6 +416,12 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 	if postResult.HTTPStatus != http.StatusCreated {
 		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 	}
+
+	// 删除分片
+	for _, v := range partLocationIds {
+		_, _ = c.Delete(ctx, &DeleteRequest{Location: v})
+	}
+
 	return postResult.Location, nil
 }
 
@@ -502,6 +511,12 @@ func (c *client) MergeParts(ctx context.Context, parts []string) (location strin
 	if postResult.HTTPStatus != http.StatusCreated {
 		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 	}
+
+	// 删除分片
+	for _, v := range parts {
+		_, _ = c.Delete(ctx, &DeleteRequest{Location: v})
+	}
+
 	return postResult.Location, nil
 }
 
