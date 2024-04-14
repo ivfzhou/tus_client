@@ -619,25 +619,25 @@ func (c *client) DiscardParts(ctx context.Context, parts []string) error {
 
 func (c *client) errorLog(ctx context.Context, msg any) {
 	if c.opt.logger != nil {
-		c.opt.logger.Error(ctx, fmt.Sprintf("%v", ctx))
+		c.opt.logger.Error(ctx, fmt.Sprintf("%v", msg))
 	}
 }
 
 func (c *client) warnLog(ctx context.Context, msg any) {
 	if c.opt.logger != nil {
-		c.opt.logger.Warn(ctx, fmt.Sprintf("%v", ctx))
+		c.opt.logger.Warn(ctx, fmt.Sprintf("%v", msg))
 	}
 }
 
 func (c *client) infoLog(ctx context.Context, msg any) {
 	if c.opt.logger != nil {
-		c.opt.logger.Info(ctx, fmt.Sprintf("%v", ctx))
+		c.opt.logger.Info(ctx, fmt.Sprintf("%v", msg))
 	}
 }
 
 func (c *client) debugLog(ctx context.Context, msg any) {
 	if c.opt.logger != nil {
-		c.opt.logger.Debug(ctx, fmt.Sprintf("%v", ctx))
+		c.opt.logger.Debug(ctx, fmt.Sprintf("%v", msg))
 	}
 }
 
