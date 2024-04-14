@@ -21,32 +21,46 @@ import (
 type TusClient interface {
 	// Options 发送HTTP OPTIONS请求
 	Options(context.Context) (*OptionsResult, error)
+
 	// Post 发送HTTP POST请求
 	Post(context.Context, *PostRequest) (*PostResult, error)
+
 	// Head 发送HTTP HEAD请求
 	Head(context.Context, *HeadRequest) (*HeadResult, error)
+
 	// Patch 发送HTTP PATCH请求
 	Patch(context.Context, *PatchRequest) (*PatchResult, error)
+
 	// Delete 发送HTTP DELETE请求
 	Delete(context.Context, *DeleteRequest) (*DeleteResult, error)
+
 	// Get 发送HTTP GET请求
 	Get(context.Context, *GetRequest) (*GetResult, error)
+
 	// MultipleUploadFromFile 读取文件并发上传到服务器，返回文件在服务器标识
 	MultipleUploadFromFile(ctx context.Context, filePath string) (location string, err error)
+
 	// MultipleUploadFromReader 读取IO流直到EOF，并发上传到服务器，返回文件在服务器标识
 	MultipleUploadFromReader(ctx context.Context, r io.Reader) (location string, err error)
+
 	// DownloadToFile 从服务器下载文件到本地
 	DownloadToFile(ctx context.Context, location, dest string) error
+
 	// DownloadToWriter 从服务器下载文件到指定的IO流中
 	DownloadToWriter(ctx context.Context, location string, w io.Writer) error
+
 	// UploadPart 上传分片
 	UploadPart(ctx context.Context, data []byte) (location string, err error)
+
 	// MergeParts 合并分片，切片顺序决定顺序合并顺序
 	MergeParts(ctx context.Context, parts []string) (location string, err error)
+
 	// DiscardParts 丢弃上传的分片
 	DiscardParts(ctx context.Context, parts []string) error
+
 	// UploadPartByIO 上传分片
 	UploadPartByIO(ctx context.Context, data io.ReadCloser, length int) (location string, err error)
+
 	// PatchByIO 发送HTTP PATCH请求
 	PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchResult, error)
 }
