@@ -12,6 +12,4 @@ module gitee.com/ivfzhou/tus_client
 
 go 1.18
 
-require gitee.com/ivfzhou/gotools/v4 v4.0.0
-
-require golang.org/x/text v0.14.0 // indirect
+require gitee.com/ivfzhou/goroutine-util v1.0.0

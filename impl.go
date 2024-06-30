@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/ivfzhou/gotools/v4"
+	"gitee.com/ivfzhou/goroutine-util"
 )
 
 type client struct {
@@ -402,7 +402,7 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 		body  []byte
 	}
 	m := sync.Map{}
-	runner, wait := gotools.NewRunner(ctx, 0, func(ctx context.Context, t *data) error {
+	runner, wait := goroutine_util.NewRunner(ctx, 0, func(ctx context.Context, t *data) error {
 		postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "partial", UploadLength: len(t.body)})
 		if err != nil {
 			return err
