@@ -55,7 +55,7 @@ func NewClient(host string, opts ...Option) TusClient {
 }
 
 func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -91,7 +91,7 @@ func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
 }
 
 func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -100,7 +100,8 @@ func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error)
 	}
 
 	// 发送请求
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s://%s/files", c.opt.schema, c.host), bytes.NewReader(pr.Body))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s://%s/files", c.opt.schema, c.host),
+		bytes.NewReader(pr.Body))
 	if err != nil {
 		c.errorLog(ctx, err)
 		return nil, err
@@ -150,7 +151,7 @@ func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error)
 }
 
 func (c *client) Head(ctx context.Context, hr *HeadRequest) (*HeadResult, error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -210,7 +211,7 @@ func (c *client) Head(ctx context.Context, hr *HeadRequest) (*HeadResult, error)
 }
 
 func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -256,7 +257,7 @@ func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, err
 }
 
 func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchResult, error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -303,7 +304,7 @@ func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchRes
 }
 
 func (c *client) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResult, error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -312,7 +313,8 @@ func (c *client) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResult, 
 	}
 
 	// 发送请求
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, dr.Location), nil)
+	req, err := http.NewRequest(http.MethodDelete,
+		fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, dr.Location), nil)
 	if err != nil {
 		c.errorLog(ctx, err)
 		return nil, err
@@ -339,7 +341,7 @@ func (c *client) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResult, 
 }
 
 func (c *client) Get(ctx context.Context, gr *GetRequest) (*GetResult, error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -386,7 +388,7 @@ func (c *client) MultipleUploadFromFile(ctx context.Context, filePath string) (l
 }
 
 func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (location string, err error) {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -406,14 +408,16 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 			return err
 		}
 		if postResult.HTTPStatus != http.StatusCreated {
-			return fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+			return fmt.Errorf("POST partial error: %d %s",
+				postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 		}
 		patchResult, err := c.Patch(ctx, &PatchRequest{Location: postResult.Location, Body: t.body})
 		if err != nil {
 			return err
 		}
 		if patchResult.HTTPStatus != http.StatusNoContent {
-			return fmt.Errorf("PATCH partial error: %d %s", patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
+			return fmt.Errorf("PATCH partial error: %d %s",
+				patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
 		}
 		m.Store(t.index, postResult.Location)
 		return nil
@@ -473,7 +477,8 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 		return "", err
 	}
 	if postResult.HTTPStatus != http.StatusCreated {
-		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+		return "", fmt.Errorf("POST partial error: %d %s",
+			postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 	}
 
 	// 删除分片
@@ -488,7 +493,7 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 }
 
 func (c *client) DownloadToWriter(ctx context.Context, location string, w io.Writer) error {
-	// 判断ctx是否被关闭
+	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
 		c.errorLog(ctx, ctx.Err())
@@ -515,7 +520,8 @@ func (c *client) DownloadToWriter(ctx context.Context, location string, w io.Wri
 	}
 	if written != int64(result.ContentLength) {
 		return fmt.Errorf(
-			"the number of bytes [%d] written to the file does not equal the number of bytes [%d] downloaded from the data",
+			"the number of bytes [%d] written to the file "+
+				"does not equal the number of bytes [%d] downloaded from the data",
 			written, result.ContentLength)
 	}
 
@@ -545,7 +551,8 @@ func (c *client) UploadPart(ctx context.Context, data []byte) (location string, 
 		return "", err
 	}
 	if postResult.HTTPStatus != http.StatusCreated {
-		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+		return "", fmt.Errorf("POST partial error: %d %s",
+			postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 	}
 
 	patchResult, err := c.Patch(ctx, &PatchRequest{Location: postResult.Location, Body: data})
@@ -553,7 +560,8 @@ func (c *client) UploadPart(ctx context.Context, data []byte) (location string, 
 		return "", err
 	}
 	if patchResult.HTTPStatus != http.StatusNoContent {
-		return "", fmt.Errorf("PATCH partial error: %d %s", patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
+		return "", fmt.Errorf("PATCH partial error: %d %s",
+			patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
 	}
 
 	return postResult.Location, nil
@@ -565,7 +573,8 @@ func (c *client) UploadPartByIO(ctx context.Context, data io.ReadCloser, length 
 		return "", err
 	}
 	if postResult.HTTPStatus != http.StatusCreated {
-		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+		return "", fmt.Errorf("POST partial error: %d %s",
+			postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 	}
 
 	patchResult, err := c.PatchByIO(ctx, &PatchByIORequest{Location: postResult.Location, Body: data, BodySize: length})
@@ -573,7 +582,8 @@ func (c *client) UploadPartByIO(ctx context.Context, data io.ReadCloser, length 
 		return "", err
 	}
 	if patchResult.HTTPStatus != http.StatusNoContent {
-		return "", fmt.Errorf("PATCH partial error: %d %s", patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
+		return "", fmt.Errorf("PATCH partial error: %d %s",
+			patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
 	}
 
 	return postResult.Location, nil
@@ -589,7 +599,8 @@ func (c *client) MergeParts(ctx context.Context, parts []string) (location strin
 		return "", err
 	}
 	if postResult.HTTPStatus != http.StatusCreated {
-		return "", fmt.Errorf("POST partial error: %d %s", postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+		return "", fmt.Errorf("POST partial error: %d %s",
+			postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
 	}
 
 	// 删除分片
