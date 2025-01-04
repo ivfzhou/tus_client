@@ -8,7 +8,7 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-module gitee.com/ivfzhou/tus_client
+module gitee.com/ivfzhou/tus_client/v2
 
 go 1.18
 

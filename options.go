@@ -12,23 +12,14 @@
 
 package tus_client
 
-import (
-	"context"
-	"net/http"
-)
-
-type Logger interface {
-	Error(ctx context.Context, msg string)
-	Info(ctx context.Context, msg string)
-	Warn(ctx context.Context, msg string)
-	Debug(ctx context.Context, msg string)
-}
+import "net/http"
 
 type Options struct {
 	hc        *http.Client
 	schema    string
 	chunkSize int
 	logger    Logger
+	logLevel  int
 }
 
 type Option func(*Options)
@@ -54,5 +45,11 @@ func WithChunkSize(chunkSize int) Option {
 func WithLogger(logger Logger) Option {
 	return func(o *Options) {
 		o.logger = logger
+	}
+}
+
+func WithLogLevel(level int) Option {
+	return func(o *Options) {
+		o.logLevel = level
 	}
 }

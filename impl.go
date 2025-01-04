@@ -38,18 +38,17 @@ type client struct {
 }
 
 func NewClient(host string, opts ...Option) TusClient {
-	c := &client{host: host}
+	c := &client{
+		host: host,
+		opt: Options{
+			hc:        http.DefaultClient,
+			schema:    "http",
+			chunkSize: 8 * 1024 * 1024,
+			logLevel:  Level_Info,
+		},
+	}
 	for _, fn := range opts {
 		fn(&c.opt)
-	}
-	if c.opt.hc == nil {
-		c.opt.hc = http.DefaultClient
-	}
-	if len(c.opt.schema) <= 0 {
-		c.opt.schema = "http"
-	}
-	if c.opt.chunkSize <= 0 {
-		c.opt.chunkSize = 8 * 1024 * 1024
 	}
 	return c
 }
@@ -58,7 +57,7 @@ func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return nil, ctx.Err()
 	default:
 	}
@@ -66,16 +65,19 @@ func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
 	// 发送请求
 	req, err := http.NewRequest(http.MethodOptions, fmt.Sprintf("%s://%s/files", c.opt.schema, c.host), nil)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "create http request error: %v", err)
 		return nil, err
 	}
-	c.debugLog(ctx, "seed options request")
+	c.logInfo(ctx, "seed options request")
+	c.logDebug(ctx, "http request url: %v", req.URL)
+	c.logDebug(ctx, "http request header: %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "send http error: %v", err)
 		return nil, err
 	}
-	defer c.closeBody(ctx, rsp.Body)
+	defer c.closeIO(ctx, rsp.Body)
+	c.logDebug(ctx, "http response header: %v", rsp.Header)
 
 	// 处理响应数据
 	res := &OptionsResult{
@@ -85,7 +87,11 @@ func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
 		TusChecksumAlgorithm: strings.Split(rsp.Header.Get("Tus-Checksum-Algorithm"), ","),
 		TusVersion:           strings.Split(rsp.Header.Get("Tus-Version"), ","),
 	}
-	res.TusMaxSize, _ = strconv.Atoi(rsp.Header.Get("Tus-Max-Size"))
+	res.TusMaxSize, err = strconv.Atoi(rsp.Header.Get("Tus-Max-Size"))
+	if err != nil {
+		c.logWarn(ctx, "convert Tus-Max-Size to integer error: %v", err)
+	}
+	c.logInfo(ctx, "get http response: %v", res)
 
 	return res, nil
 }
@@ -94,7 +100,7 @@ func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error)
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return nil, ctx.Err()
 	default:
 	}
@@ -103,7 +109,7 @@ func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error)
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s://%s/files", c.opt.schema, c.host),
 		bytes.NewReader(pr.Body))
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "create http request error: %v", err)
 		return nil, err
 	}
 	if len(pr.TusResumable) <= 0 {
@@ -126,26 +132,35 @@ func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error)
 	if len(pr.UploadConcat) > 0 {
 		req.Header.Set("Upload-Concat", pr.UploadConcat)
 	}
-	c.debugLog(ctx, "seed post request")
+	c.logInfo(ctx, "seed post request")
+	c.logDebug(ctx, "http request url: %v", req.URL)
+	c.logDebug(ctx, "http request header: %v", req.Header)
+	c.logDebug(ctx, "http request body length: %v", len(pr.Body))
 	rsp, err := c.opt.hc.Do(req)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "send http error: %v", err)
 		return nil, err
 	}
-	defer c.closeBody(ctx, rsp.Body)
+	defer c.closeIO(ctx, rsp.Body)
+	c.logDebug(ctx, "http response header: %v", rsp.Header)
 
 	// 处理响应数据
 	res := &PostResult{
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, _ = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
+	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
+	if err != nil {
+		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	}
 	u, err := url.Parse(rsp.Header.Get("Location"))
 	if err != nil {
+		c.logError(ctx, "parse Location error: %v", err)
 		return nil, err
 	}
 	paths := strings.Split(u.Path, "/")
 	res.Location = paths[len(paths)-1]
+	c.logInfo(ctx, "get http response: %v", res)
 
 	return res, nil
 }
@@ -154,35 +169,45 @@ func (c *client) Head(ctx context.Context, hr *HeadRequest) (*HeadResult, error)
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return nil, ctx.Err()
 	default:
 	}
 
 	// 发送请求
-	req, err := http.NewRequest(http.MethodHead, fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, hr.Location), nil)
+	req, err := http.NewRequest(http.MethodHead, fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, hr.Location),
+		nil)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "create http request error: %v", err)
 		return nil, err
 	}
 	if len(hr.TusResumable) <= 0 {
 		hr.TusResumable = "1.0.0"
 	}
-	c.debugLog(ctx, "seed head request")
+	c.logInfo(ctx, "seed head request")
+	c.logDebug(ctx, "http request url: %v", req.URL)
+	c.logDebug(ctx, "http request header: %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "send http error: %v", err)
 		return nil, err
 	}
-	defer c.closeBody(ctx, rsp.Body)
+	defer c.closeIO(ctx, rsp.Body)
+	c.logDebug(ctx, "http response header: %v", rsp.Header)
 
 	// 处理响应数据
 	res := &HeadResult{
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, _ = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
-	res.UploadLength, _ = strconv.Atoi(rsp.Header.Get("Upload-Length"))
+	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
+	if err != nil {
+		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	}
+	res.UploadLength, err = strconv.Atoi(rsp.Header.Get("Upload-Length"))
+	if err != nil {
+		c.logWarn(ctx, "convert Upload-Length to integer error: %v", err)
+	}
 	res.UploadDeferLength = rsp.Header.Get("Upload-Defer-Length") == "1"
 	meta := rsp.Header.Get("Upload-Metadata")
 	kv := strings.Split(meta, ",")
@@ -196,16 +221,23 @@ func (c *client) Head(ctx context.Context, hr *HeadRequest) (*HeadResult, error)
 	}
 	for _, v := range kv {
 		pair := strings.Split(v, " ")
-		if len(pair) >= 2 {
-			key, err := url.QueryUnescape(pair[0])
-			if err == nil {
-				value, err := base64.StdEncoding.DecodeString(pair[1])
-				if err == nil {
-					res.UploadMetadata[key] = string(value)
-				}
-			}
+		if len(pair) < 2 {
+			c.logWarn(ctx, "need to have 2 elem: %v", pair)
+			continue
 		}
+		key, err := url.QueryUnescape(pair[0])
+		if err != nil {
+			c.logWarn(ctx, "unescape error: %v", err)
+			continue
+		}
+		value, err := base64.StdEncoding.DecodeString(pair[1])
+		if err != nil {
+			c.logWarn(ctx, "base64 decode error: %v", err)
+			continue
+		}
+		res.UploadMetadata[key] = string(value)
 	}
+	c.logInfo(ctx, "get http response: %v", res)
 
 	return res, nil
 }
@@ -214,7 +246,7 @@ func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, err
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return nil, ctx.Err()
 	default:
 	}
@@ -223,7 +255,7 @@ func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, err
 	req, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, pr.Location),
 		bytes.NewReader(pr.Body))
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "create http request error: %v", err)
 		return nil, err
 	}
 	if len(pr.TusResumable) <= 0 {
@@ -237,21 +269,32 @@ func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, err
 		req.Header.Set("Upload-Checksum", fmt.Sprintf("%s %s",
 			pr.UploadChecksumAlgorithm, base64.StdEncoding.EncodeToString([]byte(pr.UploadChecksum))))
 	}
-	c.debugLog(ctx, "seed patch request")
+	c.logInfo(ctx, "seed patch request")
+	c.logDebug(ctx, "http request url: %v", req.URL)
+	c.logDebug(ctx, "http request header: %v", req.Header)
+	c.logDebug(ctx, "http request body length: %v", len(pr.Body))
 	rsp, err := c.opt.hc.Do(req)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "send http error: %v", err)
 		return nil, err
 	}
-	defer c.closeBody(ctx, rsp.Body)
+	defer c.closeIO(ctx, rsp.Body)
+	c.logDebug(ctx, "http response header: %v", rsp.Header)
 
 	// 处理响应数据
 	res := &PatchResult{
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, _ = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
-	res.UploadExpires, _ = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", rsp.Header.Get("Upload-Expires"))
+	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
+	if err != nil {
+		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	}
+	res.UploadExpires, err = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", rsp.Header.Get("Upload-Expires"))
+	if err != nil {
+		c.logWarn(ctx, "parse time error: %v", err)
+	}
+	c.logInfo(ctx, "get http response %v", res)
 
 	return res, nil
 }
@@ -260,7 +303,7 @@ func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchRes
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return nil, ctx.Err()
 	default:
 	}
@@ -269,6 +312,7 @@ func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchRes
 	req, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, pr.Location),
 		nil)
 	if err != nil {
+		c.logError(ctx, "create http request error: %v", err)
 		return nil, err
 	}
 	if len(pr.TusResumable) <= 0 {
@@ -284,21 +328,32 @@ func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchRes
 	}
 	req.ContentLength = int64(pr.BodySize)
 	req.Body = pr.Body
-	c.debugLog(ctx, "seed patch request")
+	c.logInfo(ctx, "seed patch request")
+	c.logDebug(ctx, "http request url: %v", req.URL)
+	c.logDebug(ctx, "http request header: %v", req.Header)
+	c.logDebug(ctx, "http request body length: %v", pr.BodySize)
 	rsp, err := c.opt.hc.Do(req)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "send http error: %v", err)
 		return nil, err
 	}
-	defer c.closeBody(ctx, rsp.Body)
+	defer c.closeIO(ctx, rsp.Body)
+	c.logDebug(ctx, "http response header: %v", rsp.Header)
 
 	// 处理响应数据
 	res := &PatchResult{
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, _ = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
-	res.UploadExpires, _ = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", rsp.Header.Get("Upload-Expires"))
+	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
+	if err != nil {
+		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	}
+	res.UploadExpires, err = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", rsp.Header.Get("Upload-Expires"))
+	if err != nil {
+		c.logWarn(ctx, "parse time error: %v", err)
+	}
+	c.logInfo(ctx, "get http response %v", res)
 
 	return res, nil
 }
@@ -307,7 +362,7 @@ func (c *client) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResult, 
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return nil, ctx.Err()
 	default:
 	}
@@ -316,26 +371,31 @@ func (c *client) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResult, 
 	req, err := http.NewRequest(http.MethodDelete,
 		fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, dr.Location), nil)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "create http request error: %v", err)
 		return nil, err
 	}
 	if len(dr.TusResumable) <= 0 {
 		dr.TusResumable = "1.0.0"
 	}
 	req.Header.Set("Tus-Resumable", dr.TusResumable)
-	c.debugLog(ctx, "seed delete request")
+	c.logInfo(ctx, "seed delete request")
+	c.logDebug(ctx, "http request url %v", req.URL)
+	c.logDebug(ctx, "http request header %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, fmt.Sprintf("send http error: %v", err))
 		return nil, err
 	}
-	defer c.closeBody(ctx, rsp.Body)
+	defer c.closeIO(ctx, rsp.Body)
+	c.logDebug(ctx, "http response header: %v", rsp.Header)
 
 	// 处理响应数据
 	res := &DeleteResult{
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
+
+	c.logInfo(ctx, "get http response %v", res)
 
 	return res, nil
 }
@@ -344,7 +404,7 @@ func (c *client) Get(ctx context.Context, gr *GetRequest) (*GetResult, error) {
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return nil, ctx.Err()
 	default:
 	}
@@ -352,19 +412,22 @@ func (c *client) Get(ctx context.Context, gr *GetRequest) (*GetResult, error) {
 	// 发送请求
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s://%s/files/%s", c.opt.schema, c.host, gr.Location), nil)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, fmt.Sprintf("create http request error: %v", err))
 		return nil, err
 	}
 	if len(gr.TusResumable) <= 0 {
 		gr.TusResumable = "1.0.0"
 	}
 	req.Header.Set("Tus-Resumable", gr.TusResumable)
-	c.debugLog(ctx, "seed get request")
+	c.logInfo(ctx, "seed get request")
+	c.logDebug(ctx, "http request url: %v", req.URL)
+	c.logDebug(ctx, "http request header: %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "send http error: %v", err)
 		return nil, err
 	}
+	c.logDebug(ctx, "http response header: %v", rsp.Header)
 
 	// 处理响应数据
 	res := &GetResult{
@@ -372,7 +435,12 @@ func (c *client) Get(ctx context.Context, gr *GetRequest) (*GetResult, error) {
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 		Body:         rsp.Body,
 	}
-	res.ContentLength, _ = strconv.Atoi(rsp.Header.Get("Content-Length"))
+	res.ContentLength, err = strconv.Atoi(rsp.Header.Get("Content-Length"))
+	if err != nil {
+		c.logWarn(ctx, fmt.Sprintf("convert Content-Length to integer error %v", err))
+	}
+
+	c.logInfo(ctx, "get http response %v", res)
 
 	return res, nil
 }
@@ -380,10 +448,10 @@ func (c *client) Get(ctx context.Context, gr *GetRequest) (*GetResult, error) {
 func (c *client) MultipleUploadFromFile(ctx context.Context, filePath string) (location string, err error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "open file error: %v", err)
 		return "", err
 	}
-	defer c.closeBody(ctx, file)
+	defer c.closeIO(ctx, file)
 	return c.MultipleUploadFromReader(ctx, file)
 }
 
@@ -391,7 +459,7 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return "", ctx.Err()
 	default:
 	}
@@ -439,18 +507,16 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 			break
 		}
 		if err != nil {
+			c.logError(ctx, fmt.Sprintf("read from io error: %v", err))
 			return "", err
 		}
 		if err = runner(&data{index, buf}, false); err != nil {
-			c.errorLog(ctx, err)
 			return "", err
 		}
 	}
 
 	// 等待处理完毕
-	err = wait(true)
-	if err != nil {
-		c.errorLog(ctx, err)
+	if err = wait(true); err != nil {
 		return "", err
 	}
 
@@ -473,7 +539,6 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 	// 请求合并分片
 	postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "final;" + strings.Join(uc, " ")})
 	if err != nil {
-		c.errorLog(ctx, err)
 		return "", err
 	}
 	if postResult.HTTPStatus != http.StatusCreated {
@@ -485,7 +550,7 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 	for _, v := range partLocationIds {
 		_, err = c.Delete(ctx, &DeleteRequest{Location: v})
 		if err != nil {
-			c.errorLog(ctx, err)
+			c.logError(ctx, "delete part error: %v", err)
 		}
 	}
 
@@ -496,7 +561,7 @@ func (c *client) DownloadToWriter(ctx context.Context, location string, w io.Wri
 	// 判断 ctx 是否被关闭
 	select {
 	case <-ctx.Done():
-		c.errorLog(ctx, ctx.Err())
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
 		return ctx.Err()
 	default:
 	}
@@ -504,18 +569,17 @@ func (c *client) DownloadToWriter(ctx context.Context, location string, w io.Wri
 	// 请求下载
 	result, err := c.Get(ctx, &GetRequest{Location: location})
 	if err != nil {
-		c.errorLog(ctx, err)
 		return err
 	}
 	if result.HTTPStatus != http.StatusOK {
 		return fmt.Errorf("%d %s", result.HTTPStatus, http.StatusText(result.HTTPStatus))
 	}
-	defer c.closeBody(ctx, result.Body)
+	defer c.closeIO(ctx, result.Body)
 
 	// 写入
 	written, err := io.Copy(w, result.Body)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "copy io error: %v", err)
 		return err
 	}
 	if written != int64(result.ContentLength) {
@@ -529,23 +593,39 @@ func (c *client) DownloadToWriter(ctx context.Context, location string, w io.Wri
 }
 
 func (c *client) DownloadToFile(ctx context.Context, location, dest string) error {
+	// 判断 ctx 是否被关闭
+	select {
+	case <-ctx.Done():
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
+		return ctx.Err()
+	default:
+	}
+
 	// 创建文件夹
 	pdir := filepath.Dir(dest)
 	if err := os.MkdirAll(pdir, 0755); err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "mkdir error: %v", err)
 		return err
 	}
 	file, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
-		c.errorLog(ctx, err)
+		c.logError(ctx, "open file error: %v", err)
 		return err
 	}
-	defer c.closeBody(ctx, file)
+	defer c.closeIO(ctx, file)
 
 	return c.DownloadToWriter(ctx, location, file)
 }
 
 func (c *client) UploadPart(ctx context.Context, data []byte) (location string, err error) {
+	// 判断 ctx 是否被关闭
+	select {
+	case <-ctx.Done():
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
+		return "", ctx.Err()
+	default:
+	}
+
 	postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "partial", UploadLength: len(data)})
 	if err != nil {
 		return "", err
@@ -568,6 +648,14 @@ func (c *client) UploadPart(ctx context.Context, data []byte) (location string, 
 }
 
 func (c *client) UploadPartByIO(ctx context.Context, data io.ReadCloser, length int) (location string, err error) {
+	// 判断 ctx 是否被关闭
+	select {
+	case <-ctx.Done():
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
+		return "", ctx.Err()
+	default:
+	}
+
 	postResult, err := c.Post(ctx, &PostRequest{UploadConcat: "partial", UploadLength: length})
 	if err != nil {
 		return "", err
@@ -590,6 +678,14 @@ func (c *client) UploadPartByIO(ctx context.Context, data io.ReadCloser, length 
 }
 
 func (c *client) MergeParts(ctx context.Context, parts []string) (location string, err error) {
+	// 判断 ctx 是否被关闭
+	select {
+	case <-ctx.Done():
+		c.logError(ctx, "context cancelled: %v", ctx.Err())
+		return "", ctx.Err()
+	default:
+	}
+
 	uc := make([]string, 0, len(parts))
 	for _, v := range parts {
 		uc = append(uc, "/files/"+v)
@@ -607,7 +703,7 @@ func (c *client) MergeParts(ctx context.Context, parts []string) (location strin
 	for _, v := range parts {
 		_, err = c.Delete(ctx, &DeleteRequest{Location: v})
 		if err != nil {
-			c.errorLog(ctx, err)
+			c.logError(ctx, "delete part error: %v", err)
 		}
 	}
 
@@ -628,35 +724,34 @@ func (c *client) DiscardParts(ctx context.Context, parts []string) error {
 	return nil
 }
 
-func (c *client) errorLog(ctx context.Context, msg any) {
-	if c.opt.logger != nil {
-		c.opt.logger.Error(ctx, fmt.Sprintf("%v", msg))
+func (c *client) logError(ctx context.Context, format string, args ...any) {
+	if c.opt.logger != nil && c.opt.logLevel <= Level_Error {
+		c.opt.logger.Printf(ctx, Level_Error, "[tus_client] "+format, args...)
 	}
 }
 
-func (c *client) warnLog(ctx context.Context, msg any) {
-	if c.opt.logger != nil {
-		c.opt.logger.Warn(ctx, fmt.Sprintf("%v", msg))
+func (c *client) logWarn(ctx context.Context, format string, args ...any) {
+	if c.opt.logger != nil && c.opt.logLevel <= Level_Warning {
+		c.opt.logger.Printf(ctx, Level_Warning, "[tus_client] "+format, args...)
 	}
 }
 
-func (c *client) infoLog(ctx context.Context, msg any) {
-	if c.opt.logger != nil {
-		c.opt.logger.Info(ctx, fmt.Sprintf("%v", msg))
+func (c *client) logInfo(ctx context.Context, format string, args ...any) {
+	if c.opt.logger != nil && c.opt.logLevel <= Level_Info {
+		c.opt.logger.Printf(ctx, Level_Info, "[tus_client] "+format, args...)
 	}
 }
 
-func (c *client) debugLog(ctx context.Context, msg any) {
-	if c.opt.logger != nil {
-		c.opt.logger.Debug(ctx, fmt.Sprintf("%v", msg))
+func (c *client) logDebug(ctx context.Context, format string, args ...any) {
+	if c.opt.logger != nil && c.opt.logLevel <= Level_Debug {
+		c.opt.logger.Printf(ctx, Level_Debug, "[tus_client] "+format, args...)
 	}
 }
 
-func (c *client) closeBody(ctx context.Context, r io.Closer) {
+func (c *client) closeIO(ctx context.Context, r io.Closer) {
 	if r != nil {
-		err := r.Close()
-		if err != nil {
-			c.errorLog(ctx, err)
+		if err := r.Close(); err != nil {
+			c.logError(ctx, fmt.Sprintf("close io error %v", err))
 		}
 	}
 }
