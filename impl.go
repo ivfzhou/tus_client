@@ -68,7 +68,7 @@ func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
 		c.logError(ctx, "create http request error: %v", err)
 		return nil, err
 	}
-	c.logInfo(ctx, "seed options request")
+	c.logInfo(ctx, "send options request")
 	c.logDebug(ctx, "http request url: %v", req.URL)
 	c.logDebug(ctx, "http request header: %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
@@ -132,7 +132,7 @@ func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error)
 	if len(pr.UploadConcat) > 0 {
 		req.Header.Set("Upload-Concat", pr.UploadConcat)
 	}
-	c.logInfo(ctx, "seed post request")
+	c.logInfo(ctx, "send post request")
 	c.logDebug(ctx, "http request url: %v", req.URL)
 	c.logDebug(ctx, "http request header: %v", req.Header)
 	c.logDebug(ctx, "http request body length: %v", len(pr.Body))
@@ -184,7 +184,7 @@ func (c *client) Head(ctx context.Context, hr *HeadRequest) (*HeadResult, error)
 	if len(hr.TusResumable) <= 0 {
 		hr.TusResumable = "1.0.0"
 	}
-	c.logInfo(ctx, "seed head request")
+	c.logInfo(ctx, "send head request")
 	c.logDebug(ctx, "http request url: %v", req.URL)
 	c.logDebug(ctx, "http request header: %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
@@ -269,7 +269,7 @@ func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, err
 		req.Header.Set("Upload-Checksum", fmt.Sprintf("%s %s",
 			pr.UploadChecksumAlgorithm, base64.StdEncoding.EncodeToString([]byte(pr.UploadChecksum))))
 	}
-	c.logInfo(ctx, "seed patch request")
+	c.logInfo(ctx, "send patch request")
 	c.logDebug(ctx, "http request url: %v", req.URL)
 	c.logDebug(ctx, "http request header: %v", req.Header)
 	c.logDebug(ctx, "http request body length: %v", len(pr.Body))
@@ -328,7 +328,7 @@ func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchRes
 	}
 	req.ContentLength = int64(pr.BodySize)
 	req.Body = pr.Body
-	c.logInfo(ctx, "seed patch request")
+	c.logInfo(ctx, "send patch request")
 	c.logDebug(ctx, "http request url: %v", req.URL)
 	c.logDebug(ctx, "http request header: %v", req.Header)
 	c.logDebug(ctx, "http request body length: %v", pr.BodySize)
@@ -378,7 +378,7 @@ func (c *client) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResult, 
 		dr.TusResumable = "1.0.0"
 	}
 	req.Header.Set("Tus-Resumable", dr.TusResumable)
-	c.logInfo(ctx, "seed delete request")
+	c.logInfo(ctx, "send delete request")
 	c.logDebug(ctx, "http request url %v", req.URL)
 	c.logDebug(ctx, "http request header %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
@@ -419,7 +419,7 @@ func (c *client) Get(ctx context.Context, gr *GetRequest) (*GetResult, error) {
 		gr.TusResumable = "1.0.0"
 	}
 	req.Header.Set("Tus-Resumable", gr.TusResumable)
-	c.logInfo(ctx, "seed get request")
+	c.logInfo(ctx, "send get request")
 	c.logDebug(ctx, "http request url: %v", req.URL)
 	c.logDebug(ctx, "http request header: %v", req.Header)
 	rsp, err := c.opt.hc.Do(req)
