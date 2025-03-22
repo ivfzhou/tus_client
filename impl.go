@@ -87,9 +87,12 @@ func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
 		TusChecksumAlgorithm: strings.Split(rsp.Header.Get("Tus-Checksum-Algorithm"), ","),
 		TusVersion:           strings.Split(rsp.Header.Get("Tus-Version"), ","),
 	}
-	res.TusMaxSize, err = strconv.Atoi(rsp.Header.Get("Tus-Max-Size"))
-	if err != nil {
-		c.logWarn(ctx, "convert Tus-Max-Size to integer error: %v", err)
+	tms, ok := rsp.Header["Tus-Max-Size"]
+	if ok && len(tms) > 0 {
+		res.TusMaxSize, err = strconv.Atoi(tms[0])
+		if err != nil {
+			c.logWarn(ctx, "convert Tus-Max-Size to integer error: %v", err)
+		}
 	}
 	c.logInfo(ctx, "get http response: %v", res)
 
@@ -149,9 +152,12 @@ func (c *client) Post(ctx context.Context, pr *PostRequest) (*PostResult, error)
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
-	if err != nil {
-		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	uo, ok := rsp.Header["Upload-Offset"]
+	if ok && len(uo) > 0 {
+		res.UploadOffset, err = strconv.Atoi(uo[0])
+		if err != nil {
+			c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+		}
 	}
 	u, err := url.Parse(rsp.Header.Get("Location"))
 	if err != nil {
@@ -200,9 +206,12 @@ func (c *client) Head(ctx context.Context, hr *HeadRequest) (*HeadResult, error)
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
-	if err != nil {
-		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	uo, ok := rsp.Header["Upload-Offset"]
+	if ok && len(uo) > 0 {
+		res.UploadOffset, err = strconv.Atoi(uo[0])
+		if err != nil {
+			c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+		}
 	}
 	res.UploadLength, err = strconv.Atoi(rsp.Header.Get("Upload-Length"))
 	if err != nil {
@@ -286,13 +295,19 @@ func (c *client) Patch(ctx context.Context, pr *PatchRequest) (*PatchResult, err
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
-	if err != nil {
-		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	uo, ok := rsp.Header["Upload-Offset"]
+	if ok && len(uo) > 0 {
+		res.UploadOffset, err = strconv.Atoi(uo[0])
+		if err != nil {
+			c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+		}
 	}
-	res.UploadExpires, err = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", rsp.Header.Get("Upload-Expires"))
-	if err != nil {
-		c.logWarn(ctx, "parse time error: %v", err)
+	ex, ok := rsp.Header["Upload-Expires"]
+	if ok && len(ex) > 0 {
+		res.UploadExpires, err = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", ex[0])
+		if err != nil {
+			c.logWarn(ctx, "parse time error: %v", err)
+		}
 	}
 	c.logInfo(ctx, "get http response %v", res)
 
@@ -345,13 +360,19 @@ func (c *client) PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchRes
 		HTTPStatus:   rsp.StatusCode,
 		TusResumable: rsp.Header.Get("Tus-Resumable"),
 	}
-	res.UploadOffset, err = strconv.Atoi(rsp.Header.Get("Upload-Offset"))
-	if err != nil {
-		c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+	uo, ok := rsp.Header["Upload-Offset"]
+	if ok && len(uo) > 0 {
+		res.UploadOffset, err = strconv.Atoi(uo[0])
+		if err != nil {
+			c.logWarn(ctx, "convert Upload-Offset to integer error: %v", err)
+		}
 	}
-	res.UploadExpires, err = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", rsp.Header.Get("Upload-Expires"))
-	if err != nil {
-		c.logWarn(ctx, "parse time error: %v", err)
+	ex, ok := rsp.Header["Upload-Expires"]
+	if ok && len(ex) > 0 {
+		res.UploadExpires, err = time.Parse("Mon, 02 Jan 2006 15:04:05 GMT", ex[0])
+		if err != nil {
+			c.logWarn(ctx, "parse time error: %v", err)
+		}
 	}
 	c.logInfo(ctx, "get http response %v", res)
 
@@ -726,25 +747,25 @@ func (c *client) DiscardParts(ctx context.Context, parts []string) error {
 
 func (c *client) logError(ctx context.Context, format string, args ...any) {
 	if c.opt.logger != nil && c.opt.logLevel <= Level_Error {
-		c.opt.logger.Printf(ctx, Level_Error, "[tus_client] "+format, args...)
+		c.opt.logger.Printf(ctx, Level_Error, format, args...)
 	}
 }
 
 func (c *client) logWarn(ctx context.Context, format string, args ...any) {
 	if c.opt.logger != nil && c.opt.logLevel <= Level_Warning {
-		c.opt.logger.Printf(ctx, Level_Warning, "[tus_client] "+format, args...)
+		c.opt.logger.Printf(ctx, Level_Warning, format, args...)
 	}
 }
 
 func (c *client) logInfo(ctx context.Context, format string, args ...any) {
 	if c.opt.logger != nil && c.opt.logLevel <= Level_Info {
-		c.opt.logger.Printf(ctx, Level_Info, "[tus_client] "+format, args...)
+		c.opt.logger.Printf(ctx, Level_Info, format, args...)
 	}
 }
 
 func (c *client) logDebug(ctx context.Context, format string, args ...any) {
 	if c.opt.logger != nil && c.opt.logLevel <= Level_Debug {
-		c.opt.logger.Printf(ctx, Level_Debug, "[tus_client] "+format, args...)
+		c.opt.logger.Printf(ctx, Level_Debug, format, args...)
 	}
 }
 
