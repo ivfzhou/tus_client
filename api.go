@@ -63,6 +63,12 @@ type TusClient interface {
 
 	// PatchByIO 发送 HTTP PATCH 请求
 	PatchByIO(ctx context.Context, pr *PatchByIORequest) (*PatchResult, error)
+
+	// UploadFile 上传文件
+	UploadFile(ctx context.Context, data []byte) (location string, err error)
+
+	// DeleteFile 删除文件
+	DeleteFile(ctx context.Context, location string) error
 }
 
 type OptionsResult struct {

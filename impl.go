@@ -745,6 +745,39 @@ func (c *client) DiscardParts(ctx context.Context, parts []string) error {
 	return nil
 }
 
+// UploadFile 上传文件
+func (c *client) UploadFile(ctx context.Context, data []byte) (location string, err error) {
+	postResult, err := c.Post(ctx, &PostRequest{UploadLength: len(data)})
+	if err != nil {
+		return "", err
+	}
+	if postResult.HTTPStatus != http.StatusCreated {
+		return "", fmt.Errorf("POST error: %d %s",
+			postResult.HTTPStatus, http.StatusText(postResult.HTTPStatus))
+	}
+	patchResult, err := c.Patch(ctx, &PatchRequest{Location: postResult.Location, Body: data})
+	if err != nil {
+		return "", err
+	}
+	if patchResult.HTTPStatus != http.StatusNoContent {
+		return "", fmt.Errorf("PATCH error: %d %s",
+			patchResult.HTTPStatus, http.StatusText(patchResult.HTTPStatus))
+	}
+	return postResult.Location, nil
+}
+
+// DeleteFile 删除文件
+func (c *client) DeleteFile(ctx context.Context, location string) (err error) {
+	result, err := c.Delete(ctx, &DeleteRequest{Location: location})
+	if err != nil {
+		return err
+	}
+	if result.HTTPStatus != http.StatusNoContent {
+		return fmt.Errorf("DELETE error: %d", result.HTTPStatus)
+	}
+	return nil
+}
+
 func (c *client) logError(ctx context.Context, format string, args ...any) {
 	if c.opt.logger != nil && c.opt.logLevel <= Level_Error {
 		c.opt.logger.Printf(ctx, Level_Error, format, args...)
