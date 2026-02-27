@@ -1,8 +1,8 @@
-# 说明
+# 一、说明
 
 Tus v1.0.0 协议客户端实现，参考自：[tus resumable upload protocol](https://github.com/tus/tus-resumable-upload-protocol/blob/main/protocol.md)
 
-# 使用
+# 二、使用
 
 ```shell
 go get gitee.com/ivfzhou/tus_client/v2@latest
