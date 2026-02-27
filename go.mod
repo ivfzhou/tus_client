@@ -10,6 +10,8 @@
 
 module gitee.com/ivfzhou/tus_client/v2
 
-go 1.18
+go 1.26
 
-require gitee.com/ivfzhou/goroutine-util v1.0.0
+retract [v2.0.0, v2.1.0]
+
+require gitee.com/ivfzhou/goroutine-util v1.0.6
