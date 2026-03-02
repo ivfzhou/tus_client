@@ -223,7 +223,7 @@ func (c *client) Head(ctx context.Context, hr *HeadRequest) (*HeadResult, error)
 	res.UploadMetadata = make(map[string]string, len(kv))
 	uc := rsp.Header.Get("Upload-Concat")
 	if len(uc) > 0 && strings.HasPrefix(uc, "final;") {
-		for _, v := range strings.Split(uc, " ") {
+		for v := range strings.SplitSeq(uc, " ") {
 			arr := strings.Split(v, "/")
 			res.UploadConcat = append(res.UploadConcat, arr[len(arr)-1])
 		}
