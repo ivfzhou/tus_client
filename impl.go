@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/ivfzhou/goroutine-util"
+	goroutine_util "gitee.com/ivfzhou/goroutine-util"
 )
 
 type client struct {
