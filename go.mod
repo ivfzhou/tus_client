@@ -14,4 +14,4 @@ go 1.26
 
 retract [v2.0.0, v2.1.0]
 
-require gitee.com/ivfzhou/goroutine-util v1.0.6
+require gitee.com/ivfzhou/goroutine-util v1.0.8-0.20260815142127-4c8d68068ef1

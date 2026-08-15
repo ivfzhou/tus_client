@@ -50,6 +50,9 @@ func NewClient(host string, opts ...Option) TusClient {
 	for _, fn := range opts {
 		fn(&c.opt)
 	}
+	if c.opt.chunkSize <= 0 {
+		c.opt.chunkSize = 8 * 1024 * 1024
+	}
 	return c
 }
 
@@ -82,10 +85,10 @@ func (c *client) Options(ctx context.Context) (*OptionsResult, error) {
 	// 处理响应数据
 	res := &OptionsResult{
 		HTTPStatus:           rsp.StatusCode,
-		TusExtension:         strings.Split(rsp.Header.Get("Tus-Extension"), ","),
+		TusExtension:         splitHeaderValues(rsp.Header.Get("Tus-Extension")),
 		TusResumable:         rsp.Header.Get("Tus-Resumable"),
-		TusChecksumAlgorithm: strings.Split(rsp.Header.Get("Tus-Checksum-Algorithm"), ","),
-		TusVersion:           strings.Split(rsp.Header.Get("Tus-Version"), ","),
+		TusChecksumAlgorithm: splitHeaderValues(rsp.Header.Get("Tus-Checksum-Algorithm")),
+		TusVersion:           splitHeaderValues(rsp.Header.Get("Tus-Version")),
 	}
 	tms, ok := rsp.Header["Tus-Max-Size"]
 	if ok && len(tms) > 0 {
@@ -458,6 +461,7 @@ func (c *client) Get(ctx context.Context, gr *GetRequest) (*GetResult, error) {
 	}
 	res.ContentLength, err = strconv.Atoi(rsp.Header.Get("Content-Length"))
 	if err != nil {
+		res.ContentLength = -1
 		c.logWarn(ctx, fmt.Sprintf("convert Content-Length to integer error %v", err))
 	}
 
@@ -515,22 +519,23 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 	// 边读边上传
 	index := 0
 	for {
-		index++
 		buf := make([]byte, c.opt.chunkSize)
 		n, err := io.ReadFull(r, buf)
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if errors.Is(err, io.ErrUnexpectedEOF) {
+			index++
 			if err = runner(&data{index, buf[:n]}, false); err != nil {
 				return "", err
 			}
 			break
 		}
 		if err != nil {
-			c.logError(ctx, fmt.Sprintf("read from io error: %v", err))
+			c.logError(ctx, "read from io error: %v", err)
 			return "", err
 		}
+		index++
 		if err = runner(&data{index, buf}, false); err != nil {
 			return "", err
 		}
@@ -539,6 +544,11 @@ func (c *client) MultipleUploadFromReader(ctx context.Context, r io.Reader) (loc
 	// 等待处理完毕
 	if err = wait(true); err != nil {
 		return "", err
+	}
+
+	// 空文件直接以普通上传方式创建
+	if index == 0 {
+		return c.UploadFile(ctx, nil)
 	}
 
 	// 处理分片
@@ -603,7 +613,7 @@ func (c *client) DownloadToWriter(ctx context.Context, location string, w io.Wri
 		c.logError(ctx, "copy io error: %v", err)
 		return err
 	}
-	if written != int64(result.ContentLength) {
+	if result.ContentLength >= 0 && written != int64(result.ContentLength) {
 		return fmt.Errorf(
 			"the number of bytes [%d] written to the file "+
 				"does not equal the number of bytes [%d] downloaded from the data",
@@ -734,9 +744,14 @@ func (c *client) MergeParts(ctx context.Context, parts []string) (location strin
 func (c *client) DiscardParts(ctx context.Context, parts []string) error {
 	var errs []error
 	for _, v := range parts {
-		_, err := c.Delete(ctx, &DeleteRequest{Location: v})
+		result, err := c.Delete(ctx, &DeleteRequest{Location: v})
 		if err != nil {
 			errs = append(errs, err)
+			continue
+		}
+		if result.HTTPStatus != http.StatusNoContent {
+			errs = append(errs, fmt.Errorf("DELETE part %s error: %d %s",
+				v, result.HTTPStatus, http.StatusText(result.HTTPStatus)))
 		}
 	}
 	if len(errs) > 0 {
@@ -800,6 +815,19 @@ func (c *client) logDebug(ctx context.Context, format string, args ...any) {
 	if c.opt.logger != nil && c.opt.logLevel <= Level_Debug {
 		c.opt.logger.Printf(ctx, Level_Debug, format, args...)
 	}
+}
+
+// splitHeaderValues 将逗号分隔的响应头值拆分为切片，空值返回 nil。
+func splitHeaderValues(v string) []string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
 }
 
 func (c *client) closeIO(ctx context.Context, r io.Closer) {
